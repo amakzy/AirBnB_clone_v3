@@ -1,90 +1,91 @@
 #!/usr/bin/python3
-""" places view """
-from flask import jsonify, abort, request
+'''
+    RESTful API for class Place
+'''
+from flask import Flask, jsonify, abort, request
 from models import storage
-from models.place import Place
-from models.city import City
-from models.user import User
 from api.v1.views import app_views
+from models.place import Place
 
 
-@app_views.route('/cities/<city_id>/places',
-                 methods=['GET'], strict_slashes=False)
-def retrieve_all_places(city_id):
-    """Retrieves the list of all Place objects of a City"""
-    city = storage.get(City, city_id)
+@app_views.route('/cities/<city_id>/places', methods=['GET'],
+                 strict_slashes=False)
+def get_place_by_city(city_id):
+    '''
+        return places in city using GET
+    '''
+    city = storage.get("City", city_id)
     if city is None:
         abort(404)
-    places = city.places
-    place_list = []
-    for place in places:
-        place_list.append(place.to_dict())
-    return jsonify(place_list)
+    places_list = [p.to_dict() for p in city.places]
+    return jsonify(places_list), 200
 
 
 @app_views.route('/places/<place_id>', methods=['GET'], strict_slashes=False)
-def retrieve_place(place_id):
-    """Retrieves a Place object or raise 404 error if not found"""
-    place = storage.get(Place, place_id)
+def get_place_id(place_id):
+    '''
+        return place and its id using GET
+    '''
+    place = storage.get("Place", place_id)
     if place is None:
         abort(404)
-    return jsonify(place.to_dict())
+    return jsonify(place.to_dict()), 200
 
 
-@app_views.route('/places/<place_id>',
-                 methods=['DELETE'], strict_slashes=False)
+@app_views.route('/places/<place_id>', methods=['DELETE'],
+                 strict_slashes=False)
 def delete_place(place_id):
-    """
-    Deletes a Place object or raise 404 error if not found
-    Returns an empty dictionary with the status code 200
-    """
-    place = storage.get(Place, place_id)
+    '''
+        DELETE place obj given place_id
+    '''
+    place = storage.get("Place", place_id)
     if place is None:
         abort(404)
-    storage.delete(place)
+    place.delete()
     storage.save()
     return jsonify({}), 200
 
 
-@app_views.route('/cities/<city_id>/places',
-                 methods=['POST'], strict_slashes=False)
+@app_views.route('/cities/<city_id>/places', methods=['POST'],
+                 strict_slashes=False)
 def create_place(city_id):
-    """
-    Creates a Place
-    Returns the new Place with the status code 201
-    """
-    if not request.json:
-        abort(400, "Not a JSON")
-    if 'user_id' not in request.json:
-        abort(400, "Missing user_id")
-    if 'name' not in request.json:
-        abort(400, "Missing name")
-    city = storage.get(City, city_id)
-    if city is None:
-        abort(404)
-    user = storage.get(User, request.json['user_id'])
-    if user is None:
-        abort(404)
-    place = Place(**request.json)
-    place.city_id = city_id
-    storage.new(place)
-    storage.save()
-    return jsonify(place.to_dict()), 201
+    '''
+        create new place obj through city association using POST
+    '''
+    if not request.get_json():
+        return jsonify({"error": "Not a JSON"}), 400
+    elif "name" not in request.get_json():
+        return jsonify({"error": "Missing name"}), 400
+    elif "user_id" not in request.get_json():
+        return jsonify({"error": "Missing user_id"}), 400
+    else:
+        obj_data = request.get_json()
+        city = storage.get("City", city_id)
+        user = storage.get("User", obj_data['user_id'])
+        if city is None or user is None:
+            abort(404)
+        obj_data['city_id'] = city.id
+        obj_data['user_id'] = user.id
+        obj = Place(**obj_data)
+        obj.save()
+        return jsonify(obj.to_dict()), 201
 
 
 @app_views.route('/places/<place_id>', methods=['PUT'], strict_slashes=False)
 def update_place(place_id):
-    """
-    Updates a Place object
-    Return the Place with the status code 200
-    """
-    place = storage.get(Place, place_id)
-    if place is None:
+    '''
+        update existing place object using PUT
+    '''
+    if not request.get_json():
+        return jsonify({"error": "Not a JSON"}), 400
+
+    obj = storage.get("Place", place_id)
+    if obj is None:
         abort(404)
-    if not request.json:
-        abort(400, "Not a JSON")
-    for key, value in request.json.items():
-        if key not in ['id', 'user_id', 'city_id', 'created_at', 'updated_at']:
-            setattr(place, key, value)
-    storage.save()
-    return jsonify(place.to_dict()), 200
+    obj_data = request.get_json()
+    ignore = ("id", "user_id", "created_at", "updated_at")
+    for k, v in obj_data.items():
+        if k not in ignore:
+            setattr(obj, k, v)
+    obj.save()
+    return jsonify(obj.to_dict()), 200
